@@ -25,13 +25,79 @@ static ssize_t device_write(struct file *, const char *, size_t, loff_t *);
 
 static int Major;
 //static int Device_Open = 0;
-static bool is_dev_opened = false;
 
+// Device part {
+static bool is_dev_opened = false;
 static char msg[BUF_LEN];
 static char *buff_Ptr;
 static bool deleted = true;
 static bool is_fwd_dir = true;
 static bool output_once = false;
+// }
+
+// Kbd part {
+static char scancode[1];
+// }
+
+static char scancode[1];
+
+struct file * file_open(const char *path, int flags, int rights)
+{
+	struct file * filp = NULL;
+	mm_segment_t oldfs;
+	int err = 0;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+	filp = filp_open(path, flags, rights);
+	set_fs(oldfs);
+	if (IS_ERR(filp)) {
+		err = PTR_ERR(filp);
+		return NULL;
+	}
+	return filp;
+}
+
+void file_close(struct file * file)
+{
+	filp_close(file, NULL);
+}
+
+int file_read(struct file * file, unsigned long long offset, unsigned char * data, unsigned int size)
+{
+	mm_segment_t oldfs;
+	int ret;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+
+	ret = vfs_read(file, data, size, &offset);
+
+	set_fs(oldfs);
+	return ret;
+}
+
+int file_write(struct file * file, unsigned long long offset, unsigned char * data, unsigned int size)
+{
+	mm_segment_t oldfs;
+	int ret;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+
+	ret = vfs_write(file, data, size, &offset);
+
+	set_fs(oldfs);
+	return ret;
+}
+
+int file_sync(struct file * file)
+{
+	vfs_fsync(file, 0);
+	return 0;
+}
+
+
 
 // implementation of strcmp
 bool str_cmp(const char* str1, const char* str2)
@@ -87,7 +153,9 @@ int init_module(void) {
 	printk(KERN_INFO "Available commands:\n");
 	printk(KERN_INFO "reverse, dir forward, dir backward\n");
 	printk(KERN_INFO "use 'rm /dev/%s'.\n\n", DEVICE_NAME);
-	return SUCCESS;
+	// return SUCCESS;
+
+	// return request_threaded_irq(1, irq_handler, irq_thread, IRQF_SHARED, "pc105", &scancode);
 }
 
 void cleanup_module(void)
