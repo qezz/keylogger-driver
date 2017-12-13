@@ -109,7 +109,7 @@ static int device_open(struct inode *inode, struct file *file)
 	return SUCCESS;
 }
 
-static  int device_release(struct inode *inode, struct file *file)
+static int device_release(struct inode *inode, struct file *file)
 {
 //	--Device_Open;
 	is_dev_opened = false;
