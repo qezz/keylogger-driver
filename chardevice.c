@@ -105,7 +105,6 @@ bool str_starts_with(const char * what, const char * with)
 	return true;
 }
 
-
 void delete_content(void)
 {
 	printk(KERN_INFO "Delete contents.\n");
@@ -142,20 +141,15 @@ static irqreturn_t irq_thread(int irq, void * data)
 	return IRQ_HANDLED;
 }
 
-int init_module(void) {
+int init_module(void)
+{
 	Major = register_chrdev(0, DEVICE_NAME, &fops);
 	if (Major < 0)
 	{
 		printk(KERN_ALERT "Registering device failed with %d\n", Major);
 		return Major;
 	}
-	printk(KERN_INFO "Major number - %d\n", Major);
 	printk(KERN_INFO "'mknod /dev/%s c %d 0'.\n", DEVICE_NAME, Major);
-	printk(KERN_INFO "Try to make 'cat file' and 'echo smth' to read and write\n");
-	printk(KERN_INFO "Available commands:\n");
-	printk(KERN_INFO "reverse, dir forward, dir backward\n");
-	printk(KERN_INFO "use 'rm /dev/%s'.\n\n", DEVICE_NAME);
-	// return SUCCESS;
 
 	return request_threaded_irq(1, irq_handler, irq_thread, IRQF_SHARED, "pc105", &scancode);
 }
