@@ -47,8 +47,6 @@ static bool output_once = false;
 static char scancode[1];
 // }
 
-static char scancode[1];
-
 struct file * file_open(const char *path, int flags, int rights)
 {
 	struct file * filp = NULL;
