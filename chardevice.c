@@ -47,8 +47,6 @@ static bool output_once = false;
 static char scancode[1];
 // }
 
-#include <string.h> // for strlen()
-
 // reverse the given null-terminated string in place
 void inplace_reverse(char * str)
 {
@@ -268,34 +266,34 @@ static ssize_t device_read(struct file *filp,char __user * buff, size_t len, lof
 	}
 	printk(KERN_INFO "Get\n");
 
-	if(!is_fwd_dir) // if bakward
-	{
-		while (*buff_Ptr != '\0') // well, it is size
-		{
-			++buff_Ptr;
-			++size;
-		}
-		while (size != 0)
-		{
-			--size;
-			--buff_Ptr;
+	/* if(!is_fwd_dir) // if bakward */
+	/* { */
+	/* 	while (*buff_Ptr != '\0') // well, it is size */
+	/* 	{ */
+	/* 		++buff_Ptr; */
+	/* 		++size; */
+	/* 	} */
+	/* 	while (size != 0) */
+	/* 	{ */
+	/* 		--size; */
+	/* 		--buff_Ptr; */
 
-			put_user(*buff_Ptr, ++buff);
+	/* 		put_user(*buff_Ptr, ++buff); */
 
-			--len;
-			++bytes;
-		}
-		output_once = true;
-	}
-	else
-	{
+	/* 		--len; */
+	/* 		++bytes; */
+	/* 	} */
+	/* 	output_once = true; */
+	/* } */
+	/* else */
+	/* { */
 		while (*buff_Ptr)
 		{
 			put_user(*(buff_Ptr++), buff++);
 			--len;
 			++bytes;
 		}
-	}
+	/* } */
 	printk(KERN_INFO "Bytes read: %d\n", bytes - 1);
 	return bytes;
 }
@@ -325,14 +323,15 @@ static ssize_t device_write(struct file *filp, const char __user * buff, size_t 
 	}
 	else if (str_cmp(new_msg, "reverse"))
 	{
-		if (is_fwd_dir)
-		{
-			direction_backward();
-		}
-		else
-		{
-			direction_forward();
-		}
+		inplace_reverse(msg);
+		/* if (is_fwd_dir) */
+		/* { */
+		/* 	direction_backward(); */
+		/* } */
+		/* else */
+		/* { */
+		/* 	direction_forward(); */
+		/* } */
 	}
 	else
 	{
