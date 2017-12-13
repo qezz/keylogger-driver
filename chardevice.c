@@ -297,9 +297,9 @@ static ssize_t device_write(struct file *filp, const char __user * buff, size_t 
 	}
 
 	// TODO: add key: write a key to driver, after that u can read from it
-	if (str_cmp(new_msg, "tofile"))
+	if (str_cmp(new_msg, "wipe"))
 	{
-		// write to file and print it's address
+		keys_pressed = 0;
 	}
 	else
 	{
