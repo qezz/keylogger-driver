@@ -275,7 +275,7 @@ static ssize_t device_read(struct file *filp,char __user * buff, size_t len, lof
 static ssize_t device_write(struct file *filp, const char __user * buff, size_t len, loff_t * offset)
 {
 	int i;
-	char new_msg[BUF_LEN];
+	char new_msg[BUF_LEN]; // FIXME: Causes 'the frame size of BUF_LEN bytes is larger than 1024 bytes'
 
 	printk(KERN_INFO "Writing to device: [lenght=%d]", (int)(len - 1) );
 
